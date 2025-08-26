@@ -1,0 +1,58 @@
+<#
+.SYNOPSIS
+Enables printer sharing for a specified printer.
+
+.DESCRIPTION
+This script sets the Shared property of a specified printer to $true, making it available on the network.
+
+.PARAMETER PrinterName
+The name of the printer to modify. This parameter is mandatory.
+
+.PARAMETER ShareName
+Optional custom share name for the printer. If not provided, the printer name will be used.
+
+.EXAMPLE
+.\Enable-PrinterSharing.ps1 -PrinterName "My Pantum M6550NW"
+
+.EXAMPLE
+.\Enable-PrinterSharing.ps1 -PrinterName "My Pantum M6550NW" -ShareName "Pantum_Shared"
+#>
+
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$PrinterName,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$ShareName
+)
+
+# Check if the printer exists
+$printer = Get-Printer -Name $PrinterName -ErrorAction SilentlyContinue
+
+if (-not $printer) {
+    Write-Error "Printer '$PrinterName' was not found. Please check the printer name and try again."
+    exit 1
+}
+
+# If no custom share name is provided, use the printer name
+if (-not $ShareName) {
+    $ShareName = $PrinterName
+}
+
+# Enable printer sharing
+try {
+    Set-Printer -Name $PrinterName -Shared $true -ShareName $ShareName
+    Write-Host "Successfully enabled sharing for printer: $PrinterName" -ForegroundColor Green
+    Write-Host "Printer is now available on the network as: $ShareName" -ForegroundColor Green
+    
+    # Display the updated printer information
+    $updatedPrinter = Get-Printer -Name $PrinterName
+    Write-Host "`nUpdated printer details:" -ForegroundColor Cyan
+    Write-Host "Name: $($updatedPrinter.Name)"
+    Write-Host "Shared: $($updatedPrinter.Shared)"
+    Write-Host "Share Name: $($updatedPrinter.ShareName)"
+}
+catch {
+    Write-Error "Failed to update printer settings: $_"
+    exit 1
+}
