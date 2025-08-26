@@ -1,0 +1,11 @@
+# Get all printers
+Get-Printer
+
+# Get detailed information about your specific printer
+Get-Printer -Name "My Pantum M6550NW" | Format-List *
+
+# Check printer drivers
+Get-PrinterDriver | Where-Object {$_.Name -like "*Pantum*"}
+
+# Get printer ports
+Get-PrinterPort
