@@ -1,0 +1,345 @@
+<#
+.SYNOPSIS
+Pantum Printer Management and Troubleshooting Tool
+
+.DESCRIPTION
+A command-line utility for managing Pantum printers, printing documents, and troubleshooting printing issues.
+
+.PARAMETER Action
+The action to perform: list, info, print-text, print-file, print-systeminfo, test, status, restart-spooler, help
+
+.PARAMETER PrinterName
+The name of the printer to use (optional for some commands)
+
+.PARAMETER Text
+Text content to print (used with print-text action)
+
+.PARAMETER FilePath
+Path to file to print (used with print-file action)
+
+.EXAMPLE
+./PantumPrinter.ps1 list
+List all Pantum printers
+
+.EXAMPLE
+./PantumPrinter.ps1 info -PrinterName "My Pantum M6550NW"
+Get detailed information about a specific printer
+
+.EXAMPLE
+./PantumPrinter.ps1 print-text -Text "Test print" -PrinterName "My Pantum M6550NW"
+Print text to a specific printer
+
+.EXAMPLE
+./PantumPrinter.ps1 test -PrinterName "My Pantum M6550NW"
+Run a comprehensive print test
+
+.EXAMPLE
+./PantumPrinter.ps1 status -PrinterName "My Pantum M6550NW"
+Check printer status and queue
+
+.EXAMPLE
+./PantumPrinter.ps1 restart-spooler
+Restart the print spooler service
+
+.EXAMPLE
+./PantumPrinter.ps1 help
+Show this help information
+#>
+
+param(
+    [Parameter(Mandatory=$true, Position=0)]
+    [ValidateSet("list", "info", "print-text", "print-file", "print-systeminfo", "test", "status", "restart-spooler", "help")]
+    [string]$Action,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$PrinterName,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$Text,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$FilePath
+)
+
+function Show-Help {
+    Write-Host "Pantum Printer Management and Troubleshooting Tool" -ForegroundColor Green
+    Write-Host "==================================================" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Usage: .\PantumPrinter.ps1 <Action> [Parameters]"
+    Write-Host ""
+    Write-Host "Actions:"
+    Write-Host "  list                 - List all Pantum printers"
+    Write-Host "  info -PrinterName <name> - Get detailed information about a specific printer"
+    Write-Host "  print-text -Text <text> -PrinterName <name> - Print text to a printer"
+    Write-Host "  print-file -FilePath <path> -PrinterName <name> - Print a text file"
+    Write-Host "  print-systeminfo -PrinterName <name> - Print system information"
+    Write-Host "  test -PrinterName <name> - Run a comprehensive print test"
+    Write-Host "  status -PrinterName <name> - Check printer status and queue"
+    Write-Host "  restart-spooler      - Restart the print spooler service"
+    Write-Host "  help                 - Show this help information"
+    Write-Host ""
+    Write-Host "Examples:"
+    Write-Host "  .\PantumPrinter.ps1 list"
+    Write-Host "  .\PantumPrinter.ps1 info -PrinterName `"My Pantum M6550NW`""
+    Write-Host "  .\PantumPrinter.ps1 test -PrinterName `"My Pantum M6550NW`""
+    Write-Host "  .\PantumPrinter.ps1 status -PrinterName `"My Pantum M6550NW`""
+    Write-Host "  .\PantumPrinter.ps1 help"
+}
+
+function Get-PantumPrinters {
+    Write-Host "Searching for Pantum printers..." -ForegroundColor Yellow
+    $printers = Get-Printer | Where-Object {$_.Name -like "*Pantum*"}
+    
+    if ($printers.Count -eq 0) {
+        Write-Host "No Pantum printers found." -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "Found $($printers.Count) Pantum printer(s):" -ForegroundColor Green
+    $printers | Format-Table Name, Type, DriverName, PortName, Shared, Published, PrinterStatus -AutoSize
+}
+
+function Get-PrinterInfo {
+    param([string]$Name)
+    
+    if (-not $Name) {
+        Write-Host "Printer name is required for this action." -ForegroundColor Red
+        return
+    }
+    
+    $printer = Get-Printer -Name $Name -ErrorAction SilentlyContinue
+    
+    if (-not $printer) {
+        Write-Host "Printer '$Name' not found." -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "Detailed information for printer: $Name" -ForegroundColor Green
+    Get-Printer -Name $Name | Format-List *
+    
+    Write-Host "`nPrinter driver information:" -ForegroundColor Green
+    Get-PrinterDriver -Name $printer.DriverName | Format-List *
+    
+    Write-Host "`nPrinter port information:" -ForegroundColor Green
+    Get-PrinterPort -Name $printer.PortName | Format-List *
+}
+
+function Print-Text {
+    param([string]$Content, [string]$Name)
+    
+    if (-not $Name) {
+        Write-Host "Printer name is required for printing." -ForegroundColor Red
+        return
+    }
+    
+    if (-not $Content) {
+        Write-Host "Text content is required for text printing." -ForegroundColor Red
+        return
+    }
+    
+    try {
+        $Content | Out-Printer -Name $Name
+        Write-Host "Text sent to printer: $Name" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Host "Error printing to $Name : $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Print-File {
+    param([string]$Path, [string]$Name)
+    
+    if (-not $Name) {
+        Write-Host "Printer name is required for printing." -ForegroundColor Red
+        return $false
+    }
+    
+    if (-not $Path) {
+        Write-Host "File path is required for file printing." -ForegroundColor Red
+        return $false
+    }
+    
+    if (-not (Test-Path $Path)) {
+        Write-Host "File not found: $Path" -ForegroundColor Red
+        return $false
+    }
+    
+    try {
+        Get-Content $Path | Out-Printer -Name $Name
+        Write-Host "File sent to printer: $Name" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Host "Error printing file to $Name : $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Print-SystemInfo {
+    param([string]$Name)
+    
+    if (-not $Name) {
+        Write-Host "Printer name is required for printing." -ForegroundColor Red
+        return $false
+    }
+    
+    try {
+        # Create a temporary file for the system info
+        $tempFile = [System.IO.Path]::GetTempFileName() + ".txt"
+        
+        # Get system information
+        $date = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $computerInfo = Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsHardwareAbstractionLayer
+        
+        # Write to temporary file
+        "System Information Report" | Out-File $tempFile
+        "Generated on: $date" | Out-File $tempFile -Append
+        "==================================" | Out-File $tempFile -Append
+        $computerInfo | Out-File $tempFile -Append
+        
+        # Print the file
+        Get-Content $tempFile | Out-Printer -Name $Name
+        Write-Host "System information sent to printer: $Name" -ForegroundColor Green
+        
+        # Clean up
+        Remove-Item $tempFile -ErrorAction SilentlyContinue
+        return $true
+    }
+    catch {
+        Write-Host "Error printing system info to $Name : $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
+function Test-Printer {
+    param([string]$Name)
+    
+    if (-not $Name) {
+        Write-Host "Printer name is required for testing." -ForegroundColor Red
+        return
+    }
+    
+    $printer = Get-Printer -Name $Name -ErrorAction SilentlyContinue
+    
+    if (-not $printer) {
+        Write-Host "Printer '$Name' not found." -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "Running comprehensive test on printer: $Name" -ForegroundColor Green
+    
+    # Check printer status
+    Write-Host "`n1. Checking printer status..." -ForegroundColor Yellow
+    $printer | Format-Table Name, Type, DriverName, PortName, Shared, Published, PrinterStatus -AutoSize
+    
+    # Check print queue
+    Write-Host "`n2. Checking print queue..." -ForegroundColor Yellow
+    $printJobs = Get-PrintJob -PrinterName $Name -ErrorAction SilentlyContinue
+    if ($printJobs) {
+        Write-Host "Print jobs in queue:" -ForegroundColor Red
+        $printJobs | Format-Table ID, Name, SubmittedTime, Status -AutoSize
+    } else {
+        Write-Host "No print jobs in queue." -ForegroundColor Green
+    }
+    
+    # Check printer driver
+    Write-Host "`n3. Checking printer driver..." -ForegroundColor Yellow
+    Get-PrinterDriver -Name $printer.DriverName | Format-List Name, DriverVersion, Manufacturer
+    
+    # Check printer port
+    Write-Host "`n4. Checking printer port..." -ForegroundColor Yellow
+    Get-PrinterPort -Name $printer.PortName | Format-List *
+    
+    # Test print
+    Write-Host "`n5. Sending test print..." -ForegroundColor Yellow
+    $testResult = Print-Text -Content "Printer Test Page - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Name $Name
+    
+    if ($testResult) {
+        Write-Host "Test print sent successfully." -ForegroundColor Green
+        Write-Host "If the printer doesn't print, check:" -ForegroundColor Yellow
+        Write-Host "  - Printer is online and has paper" -ForegroundColor Yellow
+        Write-Host "  - Printer is not paused or in error state" -ForegroundColor Yellow
+        Write-Host "  - Print spooler is running (try restart-spooler action)" -ForegroundColor Yellow
+    } else {
+        Write-Host "Test print failed." -ForegroundColor Red
+    }
+}
+
+function Get-PrinterStatus {
+    param([string]$Name)
+    
+    if (-not $Name) {
+        Write-Host "Printer name is required for status check." -ForegroundColor Red
+        return
+    }
+    
+    $printer = Get-Printer -Name $Name -ErrorAction SilentlyContinue
+    
+    if (-not $printer) {
+        Write-Host "Printer '$Name' not found." -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "Status for printer: $Name" -ForegroundColor Green
+    $printer | Format-Table Name, Type, DriverName, PortName, Shared, Published, PrinterStatus -AutoSize
+    
+    Write-Host "`nPrint jobs in queue:" -ForegroundColor Yellow
+    $printJobs = Get-PrintJob -PrinterName $Name -ErrorAction SilentlyContinue
+    if ($printJobs) {
+        $printJobs | Format-Table ID, Name, SubmittedTime, Status, Size -AutoSize
+    } else {
+        Write-Host "No print jobs in queue." -ForegroundColor Green
+    }
+    
+    # Interpret printer status
+    Write-Host "`nStatus interpretation:" -ForegroundColor Yellow
+    switch ($printer.PrinterStatus) {
+        0 { Write-Host "  The printer is in an unknown state." -ForegroundColor Yellow }
+        1 { Write-Host "  The printer is paused." -ForegroundColor Red }
+        2 { Write-Host "  The printer is in error state." -ForegroundColor Red }
+        3 { Write-Host "  The printer is being deleted." -ForegroundColor Yellow }
+        4 { Write-Host "  The printer is printing." -ForegroundColor Green }
+        5 { Write-Host "  The printer is processing a print job." -ForegroundColor Green }
+        6 { Write-Host "  The printer is initializing." -ForegroundColor Yellow }
+        7 { Write-Host "  The printer is warming up." -ForegroundColor Yellow }
+        8 { Write-Host "  The printer is toner low." -ForegroundColor Yellow }
+        9 { Write-Host "  The printer has no toner." -ForegroundColor Red }
+        10 { Write-Host "  The printer is out of paper." -ForegroundColor Red }
+        11 { Write-Host "  The printer needs manual feed." -ForegroundColor Yellow }
+        12 { Write-Host "  The printer has a paper jam." -ForegroundColor Red }
+        13 { Write-Host "  The printer is offline." -ForegroundColor Red }
+        default { Write-Host "  Unknown status code: $($printer.PrinterStatus)" -ForegroundColor Yellow }
+    }
+}
+
+function Restart-PrintSpooler {
+    Write-Host "Restarting Print Spooler service..." -ForegroundColor Yellow
+    
+    try {
+        Stop-Service -Name Spooler -Force -ErrorAction Stop
+        Write-Host "Print Spooler stopped." -ForegroundColor Green
+        
+        Start-Service -Name Spooler -ErrorAction Stop
+        Write-Host "Print Spooler started." -ForegroundColor Green
+        Write-Host "Print spooler has been restarted successfully." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Error restarting print spooler: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# Main execution
+switch ($Action) {
+    "list" { Get-PantumPrinters }
+    "info" { Get-PrinterInfo -Name $PrinterName }
+    "print-text" { Print-Text -Content $Text -Name $PrinterName }
+    "print-file" { Print-File -Path $FilePath -Name $PrinterName }
+    "print-systeminfo" { Print-SystemInfo -Name $PrinterName }
+    "test" { Test-Printer -Name $PrinterName }
+    "status" { Get-PrinterStatus -Name $PrinterName }
+    "restart-spooler" { Restart-PrintSpooler }
+    "help" { Show-Help }
+    default { Show-Help }
+}
